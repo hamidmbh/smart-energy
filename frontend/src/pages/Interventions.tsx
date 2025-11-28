@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { interventionsDB, roomsDB, usersDB } from '@/services/database';
-import { interventionsAPI } from '@/services/api';
+import { interventionsAPI, roomsAPI, usersAPI } from '@/services/api';
 import { Intervention } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -25,22 +24,58 @@ import { toast } from 'sonner';
 const Interventions = () => {
   const { user } = useAuth();
   const [interventions, setInterventions] = useState<Intervention[]>([]);
+  const [roomsMap, setRoomsMap] = useState<Record<string, string>>({});
+  const [techniciansMap, setTechniciansMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
   const [selectedIntervention, setSelectedIntervention] = useState<Intervention | null>(null);
   const [completionNotes, setCompletionNotes] = useState('');
 
   useEffect(() => {
     loadInterventions();
+  }, [user]);
+
+  useEffect(() => {
+    loadReferenceData();
   }, []);
 
   const loadInterventions = async () => {
-    let response;
-    if (user?.role === 'technician') {
-      response = await interventionsAPI.getByTechnician(user.id);
-    } else {
-      response = await interventionsAPI.getAll();
+    if (!user) return;
+    try {
+      let response;
+      if (user.role === 'technician') {
+        response = await interventionsAPI.getByTechnician(user.id);
+      } else {
+        response = await interventionsAPI.getAll();
+      }
+      setInterventions(response.data);
+    } catch (error) {
+      console.error('Failed to load interventions', error);
     }
-    setInterventions(response.data);
+  };
+
+  const loadReferenceData = async () => {
+    try {
+      const [roomsResponse, usersResponse] = await Promise.all([
+        roomsAPI.getAll(),
+        usersAPI.getAll(),
+      ]);
+
+      setRoomsMap(
+        roomsResponse.data.reduce((acc, room) => {
+          acc[room.id] = room.number;
+          return acc;
+        }, {} as Record<string, string>)
+      );
+
+      setTechniciansMap(
+        usersResponse.data.reduce((acc, currentUser) => {
+          acc[currentUser.id] = currentUser.name;
+          return acc;
+        }, {} as Record<string, string>)
+      );
+    } catch (error) {
+      console.error('Failed to load reference data', error);
+    }
   };
 
   const filteredInterventions = interventions.filter(intervention =>
@@ -87,15 +122,10 @@ const Interventions = () => {
     }
   };
 
-  const getRoomNumber = (roomId: string) => {
-    const room = roomsDB.getById(roomId);
-    return room ? room.number : roomId;
-  };
+  const getRoomNumber = (roomId: string) => roomsMap[roomId] ?? roomId;
 
-  const getTechnicianName = (technicianId: string) => {
-    const technician = usersDB.getById(technicianId);
-    return technician ? technician.name : 'N/A';
-  };
+  const getTechnicianName = (technicianId: string) =>
+    techniciansMap[technicianId] ?? 'N/A';
 
   const getTimeSince = (dateString: string) => {
     const date = new Date(dateString);

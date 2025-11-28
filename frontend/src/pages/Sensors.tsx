@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { sensorsDB, roomsDB } from '@/services/database';
-import { sensorsAPI } from '@/services/api';
+import { sensorsAPI, roomsAPI } from '@/services/api';
 import { Sensor } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Sensors = () => {
   const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [roomsMap, setRoomsMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'error'>('all');
 
   useEffect(() => {
@@ -27,8 +27,16 @@ const Sensors = () => {
   }, []);
 
   const loadSensors = async () => {
-    const response = await sensorsAPI.getAll();
-    setSensors(response.data);
+    const [sensorsResponse, roomsResponse] = await Promise.all([
+      sensorsAPI.getAll(),
+      roomsAPI.getAll(),
+    ]);
+    setSensors(sensorsResponse.data);
+    const map = roomsResponse.data.reduce((acc, room) => {
+      acc[room.id] = room.number;
+      return acc;
+    }, {} as Record<string, string>);
+    setRoomsMap(map);
   };
 
   const filteredSensors = sensors.filter(sensor =>
@@ -84,10 +92,7 @@ const Sensors = () => {
     }
   };
 
-  const getRoomNumber = (roomId: string) => {
-    const room = roomsDB.getById(roomId);
-    return room ? room.number : roomId;
-  };
+  const getRoomNumber = (roomId: string) => roomsMap[roomId] ?? roomId;
 
   const getTimeSince = (dateString: string) => {
     const date = new Date(dateString);

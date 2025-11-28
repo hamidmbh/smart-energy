@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '@/types';
-import { usersDB } from '@/services/database';
+import { authAPI } from '@/services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -16,34 +16,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user on mount
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const initialize = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        localStorage.removeItem('user');
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+
+      try {
+        const response = await authAPI.getCurrentUser();
+        const currentUser = response.data?.data ?? response.data;
+        localStorage.setItem('user', JSON.stringify(currentUser));
+        setUser(currentUser);
+      } catch (error) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initialize();
   }, []);
 
   const login = async (email: string, password: string) => {
-    // Find user in database
-    const foundUser = usersDB.query(u => u.email === email)[0];
-    
-    if (!foundUser) {
-      throw new Error('Utilisateur non trouvé');
-    }
-    
-    // In a real app, verify password here
-    // For now, accept any password for demo purposes
-    
-    localStorage.setItem('user', JSON.stringify(foundUser));
-    localStorage.setItem('token', 'mock-jwt-token');
-    setUser(foundUser);
+    const { data } = await authAPI.login(email, password);
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
   };
 
-  const logout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    setUser(null);
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (error) {
+      // ignore logout errors (token might already be invalid)
+    } finally {
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      setUser(null);
+    }
   };
 
   return (

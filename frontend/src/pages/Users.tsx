@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { usersDB } from '@/services/database';
 import { usersAPI } from '@/services/api';
 import { User } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -47,9 +46,11 @@ const Users = () => {
   const handleAddUser = async () => {
     try {
       await usersAPI.create({
-        ...formData,
-        id: `user-${Date.now()}`,
-        password: 'password123', // Default password
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        roomId: formData.roomId || undefined,
+        password: 'password123',
       });
       await loadUsers();
       setIsAddDialogOpen(false);

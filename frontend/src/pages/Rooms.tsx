@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { roomsDB } from '@/services/database';
 import { roomsAPI } from '@/services/api';
 import { Room } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
