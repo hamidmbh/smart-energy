@@ -13,7 +13,7 @@ class RoomController extends Controller
 {
     public function index()
     {
-        $rooms = Room::with('client')->orderBy('number')->get();
+        $rooms = Room::with(['client', 'technicians'])->orderBy('number')->get();
 
         return RoomResource::collection($rooms);
     }
@@ -23,12 +23,12 @@ class RoomController extends Controller
         $data = $this->validateRoom($request);
         $room = Room::create($data);
 
-        return new RoomResource($room->load('client'));
+        return new RoomResource($room->load(['client', 'technicians']));
     }
 
     public function show(Room $room): RoomResource
     {
-        return new RoomResource($room->load('client'));
+        return new RoomResource($room->load(['client', 'technicians']));
     }
 
     public function update(Request $request, Room $room): RoomResource
@@ -36,7 +36,7 @@ class RoomController extends Controller
         $data = $this->validateRoom($request, $room->id, isUpdate: true);
         $room->update($data);
 
-        return new RoomResource($room->load('client'));
+        return new RoomResource($room->load(['client', 'technicians']));
     }
 
     public function destroy(Room $room): JsonResponse

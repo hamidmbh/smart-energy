@@ -12,7 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->statefulApi();
+        // API uses stateless Bearer tokens, no need for stateful API middleware
+        // CSRF is automatically disabled for API routes in Laravel
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

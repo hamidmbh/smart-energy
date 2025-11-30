@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { usersAPI } from '@/services/api';
-import { User } from '@/types';
+import { usersAPI, roomsAPI } from '@/services/api';
+import { User, Room } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,11 +18,13 @@ import {
   Shield,
   Mail
 } from 'lucide-react';
+import { Checkbox as CheckboxComponent } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
 const Users = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [filter, setFilter] = useState<'all' | 'admin' | 'technician' | 'client'>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -32,15 +34,22 @@ const Users = () => {
     email: '',
     role: 'client' as User['role'],
     roomId: '',
+    assignedRoomIds: [] as string[],
   });
 
   useEffect(() => {
     loadUsers();
+    loadRooms();
   }, []);
 
   const loadUsers = async () => {
     const response = await usersAPI.getAll();
     setUsers(response.data);
+  };
+
+  const loadRooms = async () => {
+    const response = await roomsAPI.getAll();
+    setRooms(response.data);
   };
 
   const handleAddUser = async () => {
@@ -50,11 +59,12 @@ const Users = () => {
         email: formData.email,
         role: formData.role,
         roomId: formData.roomId || undefined,
+        assignedRoomIds: formData.role === 'technician' ? formData.assignedRoomIds : undefined,
         password: 'password123',
       });
       await loadUsers();
       setIsAddDialogOpen(false);
-      setFormData({ name: '', email: '', role: 'client', roomId: '' });
+      setFormData({ name: '', email: '', role: 'client', roomId: '', assignedRoomIds: [] });
       toast.success('Utilisateur créé avec succès');
     } catch (error) {
       toast.error('Erreur lors de la création');
@@ -64,11 +74,14 @@ const Users = () => {
   const handleEditUser = async () => {
     if (!selectedUser) return;
     try {
-      await usersAPI.update(selectedUser.id, formData);
+      await usersAPI.update(selectedUser.id, {
+        ...formData,
+        assignedRoomIds: formData.role === 'technician' ? formData.assignedRoomIds : undefined,
+      });
       await loadUsers();
       setIsEditDialogOpen(false);
       setSelectedUser(null);
-      setFormData({ name: '', email: '', role: 'client', roomId: '' });
+      setFormData({ name: '', email: '', role: 'client', roomId: '', assignedRoomIds: [] });
       toast.success('Utilisateur modifié avec succès');
     } catch (error) {
       toast.error('Erreur lors de la modification');
@@ -92,6 +105,7 @@ const Users = () => {
       email: user.email,
       role: user.role,
       roomId: user.roomId || '',
+      assignedRoomIds: user.assignedRooms?.map(r => r.id) || [],
     });
     setIsEditDialogOpen(true);
   };
@@ -186,15 +200,55 @@ const Users = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="roomId">Chambre (optionnel)</Label>
-                  <Input
-                    id="roomId"
-                    value={formData.roomId}
-                    onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
-                    placeholder="101"
-                  />
-                </div>
+                {formData.role === 'client' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="roomId">Chambre (optionnel)</Label>
+                    <Input
+                      id="roomId"
+                      value={formData.roomId}
+                      onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                      placeholder="101"
+                    />
+                  </div>
+                )}
+                {formData.role === 'technician' && (
+                  <div className="space-y-2">
+                    <Label>Chambres assignées</Label>
+                    <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                      {rooms.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Aucune chambre disponible</p>
+                      ) : (
+                        rooms.map((room) => (
+                          <div key={room.id} className="flex items-center space-x-2">
+                            <CheckboxComponent
+                              id={`room-${room.id}`}
+                              checked={formData.assignedRoomIds.includes(room.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setFormData({
+                                    ...formData,
+                                    assignedRoomIds: [...formData.assignedRoomIds, room.id],
+                                  });
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    assignedRoomIds: formData.assignedRoomIds.filter(id => id !== room.id),
+                                  });
+                                }
+                              }}
+                            />
+                            <Label
+                              htmlFor={`room-${room.id}`}
+                              className="text-sm font-normal cursor-pointer"
+                            >
+                              Chambre {room.number} - Étage {room.floor}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -307,6 +361,12 @@ const Users = () => {
                         <span>Chambre {user.roomId}</span>
                       </div>
                     )}
+                    {user.role === 'technician' && user.assignedRooms && user.assignedRooms.length > 0 && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Hotel className="h-4 w-4" />
+                        <span>{user.assignedRooms.length} chambre(s) assignée(s)</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-2 mt-4">
@@ -393,14 +453,54 @@ const Users = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-roomId">Chambre (optionnel)</Label>
-              <Input
-                id="edit-roomId"
-                value={formData.roomId}
-                onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
-              />
-            </div>
+            {formData.role === 'client' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-roomId">Chambre (optionnel)</Label>
+                <Input
+                  id="edit-roomId"
+                  value={formData.roomId}
+                  onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                />
+              </div>
+            )}
+            {formData.role === 'technician' && (
+              <div className="space-y-2">
+                <Label>Chambres assignées</Label>
+                <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                  {rooms.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucune chambre disponible</p>
+                  ) : (
+                    rooms.map((room) => (
+                      <div key={room.id} className="flex items-center space-x-2">
+                        <CheckboxComponent
+                          id={`edit-room-${room.id}`}
+                          checked={formData.assignedRoomIds.includes(room.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setFormData({
+                                ...formData,
+                                assignedRoomIds: [...formData.assignedRoomIds, room.id],
+                              });
+                            } else {
+                              setFormData({
+                                ...formData,
+                                assignedRoomIds: formData.assignedRoomIds.filter(id => id !== room.id),
+                              });
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`edit-room-${room.id}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          Chambre {room.number} - Étage {room.floor}
+                        </Label>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>

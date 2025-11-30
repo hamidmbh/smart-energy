@@ -27,6 +27,7 @@ class RoomResource extends JsonResource
             'mode' => $this->mode,
             'clientId' => $this->client_id ? (string) $this->client_id : null,
             'client' => UserResource::make($this->whenLoaded('client')),
+            'technicians' => UserResource::collection($this->whenLoaded('technicians')),
         ];
     }
 }

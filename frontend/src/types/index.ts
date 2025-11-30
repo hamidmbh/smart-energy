@@ -6,6 +6,7 @@ export interface User {
   name: string;
   role: UserRole;
   roomId?: string;
+  assignedRooms?: Room[];
 }
 
 export interface Room {
@@ -20,6 +21,7 @@ export interface Room {
   climatizationStatus?: boolean;
   mode?: RoomMode;
   clientId?: string;
+  technicians?: User[];
 }
 
 export type RoomMode = 'eco' | 'comfort' | 'night' | 'maintenance';

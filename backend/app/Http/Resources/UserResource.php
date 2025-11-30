@@ -20,6 +20,7 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'role' => $this->role,
             'roomId' => $this->room_id ? (string) $this->room_id : null,
+            'assignedRooms' => RoomResource::collection($this->whenLoaded('assignedRooms')),
         ];
     }
 }

@@ -53,4 +53,10 @@ class Room extends Model
     {
         return $this->hasMany(EnergyReading::class);
     }
+
+    public function technicians()
+    {
+        return $this->belongsToMany(User::class, 'technician_room', 'room_id', 'technician_id')
+            ->withTimestamps();
+    }
 }

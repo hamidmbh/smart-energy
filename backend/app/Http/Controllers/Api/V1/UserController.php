@@ -14,7 +14,7 @@ class UserController extends Controller
 {
     public function index()
     {
-        $users = User::orderBy('name')->get();
+        $users = User::with('assignedRooms')->orderBy('name')->get();
 
         return UserResource::collection($users);
     }
@@ -25,9 +25,16 @@ class UserController extends Controller
         $data = $this->validateUser($request);
         $data['password'] = Hash::make($data['password']);
 
-        $user = User::create($data);
+        $roomIds = $data['assigned_room_ids'] ?? [];
+        unset($data['assigned_room_ids']);
 
-        return new UserResource($user);
+        $user = User::create($data);
+        
+        if ($user->role === 'technician' && !empty($roomIds)) {
+            $user->assignedRooms()->sync($roomIds);
+        }
+
+        return new UserResource($user->load('assignedRooms'));
     }
 
     public function update(Request $request, User $user): UserResource
@@ -41,9 +48,16 @@ class UserController extends Controller
             unset($data['password']);
         }
 
+        $roomIds = $data['assigned_room_ids'] ?? null;
+        unset($data['assigned_room_ids']);
+
         $user->update($data);
 
-        return new UserResource($user);
+        if ($user->role === 'technician' && $roomIds !== null) {
+            $user->assignedRooms()->sync($roomIds);
+        }
+
+        return new UserResource($user->load('assignedRooms'));
     }
 
     public function destroy(User $user): JsonResponse
@@ -65,6 +79,8 @@ class UserController extends Controller
             'password' => [$isUpdate ? 'nullable' : 'required', 'string', 'min:8'],
             'role' => [$isUpdate ? 'sometimes' : 'required', 'in:admin,technician,client'],
             'room_id' => ['nullable', 'exists:rooms,id'],
+            'assigned_room_ids' => ['nullable', 'array'],
+            'assigned_room_ids.*' => ['exists:rooms,id'],
         ]);
     }
 
@@ -72,6 +88,9 @@ class UserController extends Controller
     {
         if ($request->has('roomId') && ! $request->has('room_id')) {
             $request->merge(['room_id' => $request->input('roomId')]);
+        }
+        if ($request->has('assignedRoomIds') && ! $request->has('assigned_room_ids')) {
+            $request->merge(['assigned_room_ids' => $request->input('assignedRoomIds')]);
         }
     }
 }

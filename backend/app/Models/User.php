@@ -58,4 +58,10 @@ class User extends Authenticatable
     {
         return $this->hasMany(Intervention::class, 'technician_id');
     }
+
+    public function assignedRooms()
+    {
+        return $this->belongsToMany(Room::class, 'technician_room', 'technician_id', 'room_id')
+            ->withTimestamps();
+    }
 }

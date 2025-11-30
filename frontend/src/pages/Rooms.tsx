@@ -14,13 +14,27 @@ import {
   Lightbulb, 
   Wind, 
   Settings,
-  Filter
+  Filter,
+  Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Rooms = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [filter, setFilter] = useState<'all' | 'occupied' | 'vacant' | 'maintenance'>('all');
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    number: '',
+    floor: '1',
+    type: 'standard',
+    status: 'vacant' as Room['status'],
+    currentTemperature: '',
+    targetTemperature: '',
+    mode: 'eco' as Room['mode'],
+  });
 
   useEffect(() => {
     loadRooms();
@@ -93,6 +107,36 @@ const Rooms = () => {
     }
   };
 
+  const handleAddRoom = async () => {
+    try {
+      await roomsAPI.create({
+        number: formData.number,
+        floor: parseInt(formData.floor),
+        type: formData.type,
+        status: formData.status,
+        currentTemperature: formData.currentTemperature ? parseFloat(formData.currentTemperature) : undefined,
+        targetTemperature: formData.targetTemperature ? parseFloat(formData.targetTemperature) : undefined,
+        mode: formData.mode,
+        lightStatus: false,
+        climatizationStatus: false,
+      });
+      await loadRooms();
+      setIsAddDialogOpen(false);
+      setFormData({
+        number: '',
+        floor: '1',
+        type: 'standard',
+        status: 'vacant',
+        currentTemperature: '',
+        targetTemperature: '',
+        mode: 'eco',
+      });
+      toast.success('Chambre créée avec succès');
+    } catch (error) {
+      toast.error('Erreur lors de la création');
+    }
+  };
+
   const stats = {
     total: rooms.length,
     occupied: rooms.filter(r => r.status === 'occupied').length,
@@ -103,9 +147,118 @@ const Rooms = () => {
   return (
     <DashboardLayout>
       <div className="p-8 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Gestion des Chambres</h1>
-          <p className="text-muted-foreground mt-1">Contrôle et supervision de toutes les chambres</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Gestion des Chambres</h1>
+            <p className="text-muted-foreground mt-1">Contrôle et supervision de toutes les chambres</p>
+          </div>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nouvelle chambre
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Ajouter une chambre</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="number">Numéro de chambre</Label>
+                  <Input
+                    id="number"
+                    value={formData.number}
+                    onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                    placeholder="101"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="floor">Étage</Label>
+                  <Input
+                    id="floor"
+                    type="number"
+                    value={formData.floor}
+                    onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
+                    min="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="type">Type</Label>
+                  <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="suite">Suite</SelectItem>
+                      <SelectItem value="deluxe">Deluxe</SelectItem>
+                      <SelectItem value="presidential">Présidentielle</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Statut</Label>
+                  <Select value={formData.status} onValueChange={(v: Room['status']) => setFormData({ ...formData, status: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vacant">Libre</SelectItem>
+                      <SelectItem value="occupied">Occupée</SelectItem>
+                      <SelectItem value="maintenance">Maintenance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="currentTemperature">Température actuelle (°C)</Label>
+                    <Input
+                      id="currentTemperature"
+                      type="number"
+                      step="0.1"
+                      value={formData.currentTemperature}
+                      onChange={(e) => setFormData({ ...formData, currentTemperature: e.target.value })}
+                      placeholder="22.5"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="targetTemperature">Température cible (°C)</Label>
+                    <Input
+                      id="targetTemperature"
+                      type="number"
+                      step="0.1"
+                      value={formData.targetTemperature}
+                      onChange={(e) => setFormData({ ...formData, targetTemperature: e.target.value })}
+                      placeholder="22"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mode">Mode</Label>
+                  <Select value={formData.mode} onValueChange={(v: Room['mode']) => setFormData({ ...formData, mode: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="eco">Éco</SelectItem>
+                      <SelectItem value="comfort">Confort</SelectItem>
+                      <SelectItem value="night">Nuit</SelectItem>
+                      <SelectItem value="maintenance">Maintenance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Annuler
+                </Button>
+                <Button onClick={handleAddRoom}>
+                  Créer
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Statistics */}

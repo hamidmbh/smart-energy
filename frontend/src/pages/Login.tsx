@@ -23,8 +23,10 @@ const Login = () => {
       await login(email, password);
       toast.success('Connexion réussie');
       navigate('/dashboard');
-    } catch (error) {
-      toast.error('Identifiants invalides');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      const message = error?.response?.data?.message || error?.message || 'Identifiants invalides';
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
