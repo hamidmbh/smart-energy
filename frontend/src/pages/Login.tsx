@@ -79,26 +79,6 @@ const Login = () => {
               )}
             </Button>
           </form>
-          
-          <div className="mt-6 pt-6 border-t">
-            <p className="text-sm text-muted-foreground text-center mb-3">
-              Comptes de démonstration :
-            </p>
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <div className="flex justify-between">
-                <span className="font-medium">Admin:</span>
-                <span>admin@hotel.com</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Technicien:</span>
-                <span>tech@hotel.com</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Client:</span>
-                <span>client@hotel.com</span>
-              </div>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

@@ -11,7 +11,7 @@ class Room extends Model
 
     protected $fillable = [
         'number',
-        'floor',
+        'floor_id',
         'type',
         'status',
         'current_temperature',
@@ -28,6 +28,11 @@ class Room extends Model
         'light_status' => 'boolean',
         'climatization_status' => 'boolean',
     ];
+
+    public function floor()
+    {
+        return $this->belongsTo(Floor::class);
+    }
 
     public function client()
     {

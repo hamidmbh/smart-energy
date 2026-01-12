@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { roomsAPI } from '@/services/api';
-import { Room } from '@/types';
+import { roomsAPI, sensorsAPI, floorsAPI } from '@/services/api';
+import { Room, Sensor, Floor } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,34 +15,53 @@ import {
   Wind, 
   Settings,
   Filter,
-  Plus
+  Plus,
+  Edit
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ChevronDown } from 'lucide-react';
 
 const Rooms = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
   const [filter, setFilter] = useState<'all' | 'occupied' | 'vacant' | 'maintenance'>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [formData, setFormData] = useState({
     number: '',
-    floor: '1',
+    floorId: '',
     type: 'standard',
     status: 'vacant' as Room['status'],
-    currentTemperature: '',
-    targetTemperature: '',
     mode: 'eco' as Room['mode'],
+    sensorIds: [] as string[],
   });
 
   useEffect(() => {
     loadRooms();
+    loadSensors();
+    loadFloors();
   }, []);
 
   const loadRooms = async () => {
     const response = await roomsAPI.getAll();
     setRooms(response.data);
+  };
+
+  const loadSensors = async () => {
+    const response = await sensorsAPI.getAll();
+    setSensors(response.data);
+  };
+
+  const loadFloors = async () => {
+    const response = await floorsAPI.getAll();
+    setFloors(response.data);
   };
 
   const filteredRooms = rooms.filter(room => 
@@ -77,6 +96,46 @@ const Rooms = () => {
     }
   };
 
+  const getTypeLabel = (type: Sensor['type']) => {
+    switch (type) {
+      case 'temperature': return 'Température';
+      case 'humidity': return 'Humidité';
+      case 'light': return 'Luminosité';
+      case 'motion': return 'Mouvement';
+      case 'energy': return 'Énergie';
+      default: return type;
+    }
+  };
+
+  // Grouper les capteurs par type
+  const sensorsByType = sensors.reduce((acc, sensor) => {
+    if (!acc[sensor.type]) {
+      acc[sensor.type] = [];
+    }
+    acc[sensor.type].push(sensor);
+    return acc;
+  }, {} as Record<Sensor['type'], Sensor[]>);
+
+  const sensorTypes: Sensor['type'][] = ['temperature', 'humidity', 'light', 'motion', 'energy'];
+
+  const handleSensorToggle = (sensorId: string, checked: boolean) => {
+    if (checked) {
+      setFormData({
+        ...formData,
+        sensorIds: [...formData.sensorIds, sensorId],
+      });
+    } else {
+      setFormData({
+        ...formData,
+        sensorIds: formData.sensorIds.filter((id) => id !== sensorId),
+      });
+    }
+  };
+
+  const getSelectedSensorsForType = (type: Sensor['type']) => {
+    return sensorsByType[type]?.filter(s => formData.sensorIds.includes(s.id)) || [];
+  };
+
   const handleToggleLight = async (roomId: string, currentState: boolean) => {
     try {
       await roomsAPI.controlEquipment(roomId, 'light', !currentState);
@@ -109,31 +168,82 @@ const Rooms = () => {
 
   const handleAddRoom = async () => {
     try {
-      await roomsAPI.create({
+      const { data: newRoom } = await roomsAPI.create({
         number: formData.number,
-        floor: parseInt(formData.floor),
+        floorId: formData.floorId,
         type: formData.type,
         status: formData.status,
-        currentTemperature: formData.currentTemperature ? parseFloat(formData.currentTemperature) : undefined,
-        targetTemperature: formData.targetTemperature ? parseFloat(formData.targetTemperature) : undefined,
         mode: formData.mode,
         lightStatus: false,
         climatizationStatus: false,
       });
+      // Assigner les capteurs sélectionnés à la nouvelle chambre
+      if (formData.sensorIds.length > 0) {
+        await Promise.all(
+          formData.sensorIds.map((sensorId) =>
+            sensorsAPI.update(sensorId, { roomId: newRoom.id })
+          )
+        );
+      }
       await loadRooms();
+      await loadSensors();
       setIsAddDialogOpen(false);
       setFormData({
         number: '',
-        floor: '1',
+        floorId: '',
         type: 'standard',
         status: 'vacant',
-        currentTemperature: '',
-        targetTemperature: '',
         mode: 'eco',
+        sensorIds: [],
       });
       toast.success('Chambre créée avec succès');
     } catch (error) {
       toast.error('Erreur lors de la création');
+    }
+  };
+
+  const openEditDialog = async (room: Room) => {
+    setSelectedRoom(room);
+    // Load sensors for this room
+    const roomSensors = sensors.filter(s => s.roomId === room.id);
+    setFormData({
+      number: room.number,
+      floorId: room.floorId || '',
+      type: room.type,
+      status: room.status,
+      mode: room.mode || 'eco',
+      sensorIds: roomSensors.map(s => s.id),
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditRoom = async () => {
+    if (!selectedRoom) return;
+    try {
+      await roomsAPI.update(selectedRoom.id, {
+        number: formData.number,
+        floorId: formData.floorId,
+        type: formData.type,
+        status: formData.status,
+        mode: formData.mode,
+      });
+      
+      // Update all selected sensors to point to this room
+      if (formData.sensorIds.length > 0) {
+        await Promise.all(
+          formData.sensorIds.map((sensorId) =>
+            sensorsAPI.update(sensorId, { roomId: selectedRoom.id })
+          )
+        );
+      }
+      
+      await loadRooms();
+      await loadSensors();
+      setIsEditDialogOpen(false);
+      setSelectedRoom(null);
+      toast.success('Chambre modifiée avec succès');
+    } catch (error) {
+      toast.error('Erreur lors de la modification');
     }
   };
 
@@ -159,11 +269,11 @@ const Rooms = () => {
                 Nouvelle chambre
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] flex flex-col">
               <DialogHeader>
                 <DialogTitle>Ajouter une chambre</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 py-4">
+              <div className="space-y-4 py-4 overflow-y-auto flex-1">
                 <div className="space-y-2">
                   <Label htmlFor="number">Numéro de chambre</Label>
                   <Input
@@ -175,13 +285,18 @@ const Rooms = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="floor">Étage</Label>
-                  <Input
-                    id="floor"
-                    type="number"
-                    value={formData.floor}
-                    onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-                    min="0"
-                  />
+                  <Select value={formData.floorId} onValueChange={(v) => setFormData({ ...formData, floorId: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner un étage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {floors.map((floor) => (
+                        <SelectItem key={floor.id} value={floor.id}>
+                          {floor.name || `Étage ${floor.number}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="type">Type</Label>
@@ -210,30 +325,6 @@ const Rooms = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="currentTemperature">Température actuelle (°C)</Label>
-                    <Input
-                      id="currentTemperature"
-                      type="number"
-                      step="0.1"
-                      value={formData.currentTemperature}
-                      onChange={(e) => setFormData({ ...formData, currentTemperature: e.target.value })}
-                      placeholder="22.5"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="targetTemperature">Température cible (°C)</Label>
-                    <Input
-                      id="targetTemperature"
-                      type="number"
-                      step="0.1"
-                      value={formData.targetTemperature}
-                      onChange={(e) => setFormData({ ...formData, targetTemperature: e.target.value })}
-                      placeholder="22"
-                    />
-                  </div>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="mode">Mode</Label>
                   <Select value={formData.mode} onValueChange={(v: Room['mode']) => setFormData({ ...formData, mode: v })}>
@@ -247,6 +338,68 @@ const Rooms = () => {
                       <SelectItem value="maintenance">Maintenance</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-3">
+                  <Label>Capteurs à associer</Label>
+                  {sensors.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucun capteur disponible</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {sensorTypes.map((type) => {
+                        const typeSensors = sensorsByType[type] || [];
+                        if (typeSensors.length === 0) return null;
+                        
+                        const selectedSensors = getSelectedSensorsForType(type);
+                        const displayValue = selectedSensors.length > 0 
+                          ? `${selectedSensors.length} sélectionné(s)` 
+                          : `Sélectionner des capteurs ${getTypeLabel(type)}`;
+
+                        return (
+                          <div key={type} className="space-y-2">
+                            <Label className="text-sm font-medium">
+                              {getTypeLabel(type)} ({typeSensors.length} disponible(s))
+                            </Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className="w-full justify-between"
+                                >
+                                  <span className="truncate">{displayValue}</span>
+                                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-full p-0" align="start">
+                                <div className="max-h-64 overflow-y-auto p-2">
+                                  {typeSensors.map((sensor) => (
+                                    <div key={sensor.id} className="flex items-center space-x-2 py-1.5 px-2 rounded-sm hover:bg-accent">
+                                      <Checkbox
+                                        id={`sensor-${sensor.id}`}
+                                        checked={formData.sensorIds.includes(sensor.id)}
+                                        onCheckedChange={(checked) => handleSensorToggle(sensor.id, checked as boolean)}
+                                      />
+                                      <Label
+                                        htmlFor={`sensor-${sensor.id}`}
+                                        className="text-sm font-normal cursor-pointer flex-1"
+                                      >
+                                        {sensor.name}
+                                        {sensor.roomId && (
+                                          <span className="text-muted-foreground ml-1">
+                                            • Chambre {sensor.roomId}
+                                          </span>
+                                        )}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>
@@ -331,7 +484,12 @@ const Rooms = () => {
                   <div>
                     <CardTitle className="text-xl">Chambre {room.number}</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Étage {room.floor} • {room.type}
+                      {typeof room.floor === 'object' && room.floor 
+                        ? (room.floor.name || `Étage ${room.floor.number}`)
+                        : typeof room.floor === 'number'
+                        ? `Étage ${room.floor}`
+                        : 'N/A'
+                      } • {room.type}
                     </p>
                   </div>
                   <Badge variant={getStatusColor(room.status)}>
@@ -412,11 +570,168 @@ const Rooms = () => {
                     </Button>
                   </div>
                 </div>
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => openEditDialog(room)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Modifier
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Modifier la chambre</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 overflow-y-auto flex-1">
+            <div className="space-y-2">
+              <Label htmlFor="edit-number">Numéro de chambre</Label>
+              <Input
+                id="edit-number"
+                value={formData.number}
+                onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                placeholder="101"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-floor">Étage</Label>
+              <Select value={formData.floorId} onValueChange={(v) => setFormData({ ...formData, floorId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionner un étage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {floors.map((floor) => (
+                    <SelectItem key={floor.id} value={floor.id}>
+                      {floor.name || `Étage ${floor.number}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-type">Type</Label>
+              <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Standard</SelectItem>
+                  <SelectItem value="suite">Suite</SelectItem>
+                  <SelectItem value="deluxe">Deluxe</SelectItem>
+                  <SelectItem value="presidential">Présidentielle</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-status">Statut</Label>
+              <Select value={formData.status} onValueChange={(v: Room['status']) => setFormData({ ...formData, status: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vacant">Libre</SelectItem>
+                  <SelectItem value="occupied">Occupée</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-mode">Mode</Label>
+              <Select value={formData.mode} onValueChange={(v: Room['mode']) => setFormData({ ...formData, mode: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="eco">Éco</SelectItem>
+                  <SelectItem value="comfort">Confort</SelectItem>
+                  <SelectItem value="night">Nuit</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3">
+              <Label>Capteurs à associer</Label>
+              {sensors.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucun capteur disponible</p>
+              ) : (
+                <div className="space-y-3">
+                  {sensorTypes.map((type) => {
+                    const typeSensors = sensorsByType[type] || [];
+                    if (typeSensors.length === 0) return null;
+                    
+                    const selectedSensors = getSelectedSensorsForType(type);
+                    const displayValue = selectedSensors.length > 0 
+                      ? `${selectedSensors.length} sélectionné(s)` 
+                      : `Sélectionner des capteurs ${getTypeLabel(type)}`;
+
+                    return (
+                      <div key={type} className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          {getTypeLabel(type)} ({typeSensors.length} disponible(s))
+                        </Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="w-full justify-between"
+                            >
+                              <span className="truncate">{displayValue}</span>
+                              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-full p-0" align="start">
+                            <div className="max-h-64 overflow-y-auto p-2">
+                              {typeSensors.map((sensor) => (
+                                <div key={sensor.id} className="flex items-center space-x-2 py-1.5 px-2 rounded-sm hover:bg-accent">
+                                  <Checkbox
+                                    id={`edit-sensor-${sensor.id}`}
+                                    checked={formData.sensorIds.includes(sensor.id)}
+                                    onCheckedChange={(checked) => handleSensorToggle(sensor.id, checked as boolean)}
+                                  />
+                                  <Label
+                                    htmlFor={`edit-sensor-${sensor.id}`}
+                                    className="text-sm font-normal cursor-pointer flex-1"
+                                  >
+                                    {sensor.name}
+                                    {sensor.roomId && sensor.roomId !== selectedRoom?.id && (
+                                      <span className="text-muted-foreground ml-1">
+                                        • Chambre {sensor.roomId}
+                                      </span>
+                                    )}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={handleEditRoom}>
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };

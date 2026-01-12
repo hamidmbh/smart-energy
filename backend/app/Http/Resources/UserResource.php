@@ -21,6 +21,18 @@ class UserResource extends JsonResource
             'role' => $this->role,
             'roomId' => $this->room_id ? (string) $this->room_id : null,
             'assignedRooms' => RoomResource::collection($this->whenLoaded('assignedRooms')),
+            'assignedFloors' => $this->role === 'technician' ? (
+                function () {
+                    try {
+                        if ($this->relationLoaded('technicianFloors')) {
+                            return $this->technicianFloors->pluck('floor')->toArray();
+                        }
+                        return $this->technicianFloors()->pluck('floor')->toArray();
+                    } catch (\Exception $e) {
+                        return [];
+                    }
+                }
+            )() : [],
         ];
     }
 }

@@ -64,4 +64,14 @@ class User extends Authenticatable
         return $this->belongsToMany(Room::class, 'technician_room', 'technician_id', 'room_id')
             ->withTimestamps();
     }
+
+    public function technicianFloors()
+    {
+        return $this->hasMany(TechnicianFloor::class, 'technician_id');
+    }
+
+    public function getAssignedFloorNumbersAttribute()
+    {
+        return $this->technicianFloors()->pluck('floor')->toArray();
+    }
 }

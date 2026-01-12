@@ -13,7 +13,7 @@ class RoomController extends Controller
 {
     public function index()
     {
-        $rooms = Room::with(['client', 'technicians'])->orderBy('number')->get();
+        $rooms = Room::with(['floor', 'client', 'technicians'])->orderBy('number')->get();
 
         return RoomResource::collection($rooms);
     }
@@ -23,12 +23,12 @@ class RoomController extends Controller
         $data = $this->validateRoom($request);
         $room = Room::create($data);
 
-        return new RoomResource($room->load(['client', 'technicians']));
+        return new RoomResource($room->load(['floor', 'client', 'technicians']));
     }
 
     public function show(Room $room): RoomResource
     {
-        return new RoomResource($room->load(['client', 'technicians']));
+        return new RoomResource($room->load(['floor', 'client', 'technicians']));
     }
 
     public function update(Request $request, Room $room): RoomResource
@@ -36,7 +36,7 @@ class RoomController extends Controller
         $data = $this->validateRoom($request, $room->id, isUpdate: true);
         $room->update($data);
 
-        return new RoomResource($room->load(['client', 'technicians']));
+        return new RoomResource($room->load(['floor', 'client', 'technicians']));
     }
 
     public function destroy(Room $room): JsonResponse
@@ -81,7 +81,7 @@ class RoomController extends Controller
                 'max:50',
                 Rule::unique('rooms', 'number')->ignore($roomId),
             ],
-            'floor' => [($isUpdate ? 'sometimes' : 'required'), 'integer', 'min:0'],
+            'floor_id' => [($isUpdate ? 'sometimes' : 'required'), 'exists:floors,id'],
             'type' => [($isUpdate ? 'sometimes' : 'required'), 'string', 'max:100'],
             'status' => [($isUpdate ? 'sometimes' : 'required'), 'in:occupied,vacant,maintenance'],
             'current_temperature' => ['sometimes', 'nullable', 'numeric'],
@@ -103,6 +103,7 @@ class RoomController extends Controller
             'lightStatus' => 'light_status',
             'climatizationStatus' => 'climatization_status',
             'clientId' => 'client_id',
+            'floorId' => 'floor_id',
         ];
 
         foreach ($mapping as $camel => $snake) {

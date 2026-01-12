@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AlertController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\EnergyController;
+use App\Http\Controllers\Api\V1\FloorController;
 use App\Http\Controllers\Api\V1\InterventionController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoomController;
@@ -37,6 +38,8 @@ Route::prefix('v1')->group(function () {
         Route::patch('interventions/{intervention}/complete', [InterventionController::class, 'complete']);
 
         Route::apiResource('users', UserController::class)->except(['show']);
+
+        Route::apiResource('floors', FloorController::class);
 
         Route::post('reports/generate', [ReportController::class, 'generate']);
     });

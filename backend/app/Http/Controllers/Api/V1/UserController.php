@@ -14,7 +14,7 @@ class UserController extends Controller
 {
     public function index()
     {
-        $users = User::with('assignedRooms')->orderBy('name')->get();
+        $users = User::with(['assignedRooms', 'technicianFloors'])->orderBy('name')->get();
 
         return UserResource::collection($users);
     }
@@ -25,16 +25,16 @@ class UserController extends Controller
         $data = $this->validateUser($request);
         $data['password'] = Hash::make($data['password']);
 
-        $roomIds = $data['assigned_room_ids'] ?? [];
-        unset($data['assigned_room_ids']);
+        $floorNumbers = $data['assigned_floor_numbers'] ?? [];
+        unset($data['assigned_floor_numbers']);
 
         $user = User::create($data);
         
-        if ($user->role === 'technician' && !empty($roomIds)) {
-            $user->assignedRooms()->sync($roomIds);
+        if ($user->role === 'technician' && !empty($floorNumbers)) {
+            $this->syncFloors($user, $floorNumbers);
         }
 
-        return new UserResource($user->load('assignedRooms'));
+        return new UserResource($user->load('technicianFloors'));
     }
 
     public function update(Request $request, User $user): UserResource
@@ -48,16 +48,16 @@ class UserController extends Controller
             unset($data['password']);
         }
 
-        $roomIds = $data['assigned_room_ids'] ?? null;
-        unset($data['assigned_room_ids']);
+        $floorNumbers = $data['assigned_floor_numbers'] ?? null;
+        unset($data['assigned_floor_numbers']);
 
         $user->update($data);
 
-        if ($user->role === 'technician' && $roomIds !== null) {
-            $user->assignedRooms()->sync($roomIds);
+        if ($user->role === 'technician' && $floorNumbers !== null) {
+            $this->syncFloors($user, $floorNumbers);
         }
 
-        return new UserResource($user->load('assignedRooms'));
+        return new UserResource($user->load('technicianFloors'));
     }
 
     public function destroy(User $user): JsonResponse
@@ -79,9 +79,20 @@ class UserController extends Controller
             'password' => [$isUpdate ? 'nullable' : 'required', 'string', 'min:8'],
             'role' => [$isUpdate ? 'sometimes' : 'required', 'in:admin,technician,client'],
             'room_id' => ['nullable', 'exists:rooms,id'],
-            'assigned_room_ids' => ['nullable', 'array'],
-            'assigned_room_ids.*' => ['exists:rooms,id'],
+            'assigned_floor_numbers' => ['nullable', 'array'],
+            'assigned_floor_numbers.*' => ['integer', 'min:0'],
         ]);
+    }
+
+    private function syncFloors(User $user, array $floorNumbers): void
+    {
+        // Supprimer les anciennes assignations
+        $user->technicianFloors()->delete();
+        
+        // Créer les nouvelles assignations
+        foreach ($floorNumbers as $floor) {
+            $user->technicianFloors()->create(['floor' => $floor]);
+        }
     }
 
     private function mergeCamelCaseFields(Request $request): void
@@ -89,8 +100,8 @@ class UserController extends Controller
         if ($request->has('roomId') && ! $request->has('room_id')) {
             $request->merge(['room_id' => $request->input('roomId')]);
         }
-        if ($request->has('assignedRoomIds') && ! $request->has('assigned_room_ids')) {
-            $request->merge(['assigned_room_ids' => $request->input('assignedRoomIds')]);
+        if ($request->has('assignedFloorNumbers') && ! $request->has('assigned_floor_numbers')) {
+            $request->merge(['assigned_floor_numbers' => $request->input('assignedFloorNumbers')]);
         }
     }
 }

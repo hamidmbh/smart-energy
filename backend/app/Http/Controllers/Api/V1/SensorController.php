@@ -86,7 +86,7 @@ class SensorController extends Controller
         return $request->validate([
             'name' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:100'],
             'type' => [$isUpdate ? 'sometimes' : 'required', 'in:temperature,humidity,light,motion,energy'],
-            'room_id' => [$isUpdate ? 'sometimes' : 'required', 'exists:rooms,id'],
+            'room_id' => ['nullable', 'exists:rooms,id'],
             'value' => ['nullable', 'numeric'],
             'unit' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:10'],
             'status' => [$isUpdate ? 'sometimes' : 'required', 'in:active,inactive,error'],

@@ -17,7 +17,14 @@ class RoomResource extends JsonResource
         return [
             'id' => (string) $this->id,
             'number' => $this->number,
-            'floor' => $this->floor,
+            'floorId' => $this->floor_id ? (string) $this->floor_id : null,
+            'floor' => $this->whenLoaded('floor', function () {
+                return [
+                    'id' => (string) $this->floor->id,
+                    'number' => $this->floor->number,
+                    'name' => $this->floor->name,
+                ];
+            }, null),
             'type' => $this->type,
             'status' => $this->status,
             'currentTemperature' => $this->current_temperature,

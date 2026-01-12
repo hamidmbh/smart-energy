@@ -7,12 +7,27 @@ export interface User {
   role: UserRole;
   roomId?: string;
   assignedRooms?: Room[];
+  assignedFloors?: number[];
+}
+
+export interface Floor {
+  id: string;
+  number: number;
+  name?: string;
+  description?: string;
+  rooms?: Room[];
+  roomsCount?: number;
 }
 
 export interface Room {
   id: string;
   number: string;
-  floor: number;
+  floorId?: string;
+  floor?: {
+    id: string;
+    number: number;
+    name?: string;
+  } | number;
   type: string;
   status: 'occupied' | 'vacant' | 'maintenance';
   currentTemperature?: number;

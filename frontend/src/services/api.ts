@@ -1,5 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
-import { Room, Sensor, Alert, EnergyConsumption, Intervention, User } from '@/types';
+import { Room, Sensor, Alert, EnergyConsumption, Intervention, User, Floor } from '@/types';
 
 // Configure base URL for Laravel API
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -115,6 +115,18 @@ export const usersAPI = {
   update: (id: string, data: Partial<User> & { password?: string }) =>
     api.put(`/users/${id}`, data).then((res) => ({ data: unwrap<User>(res) })),
   delete: (id: string) => api.delete(`/users/${id}`),
+};
+
+export const floorsAPI = {
+  getAll: () =>
+    api.get('/floors').then((res) => ({ data: unwrap<Floor[]>(res) })),
+  getOne: (id: string) =>
+    api.get(`/floors/${id}`).then((res) => ({ data: unwrap<Floor>(res) })),
+  create: (data: Omit<Floor, 'id'>) =>
+    api.post('/floors', data).then((res) => ({ data: unwrap<Floor>(res) })),
+  update: (id: string, data: Partial<Floor>) =>
+    api.put(`/floors/${id}`, data).then((res) => ({ data: unwrap<Floor>(res) })),
+  delete: (id: string) => api.delete(`/floors/${id}`),
 };
 
 export const reportsAPI = {
