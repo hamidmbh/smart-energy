@@ -14,7 +14,8 @@ import {
   LogOut,
   Moon,
   Sun,
-  Zap
+  Zap,
+  Building2
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 
@@ -37,6 +38,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       case 'admin':
         return [
           { icon: LayoutDashboard, label: 'Tableau de bord', path: '/dashboard' },
+          { icon: Building2, label: 'Étages', path: '/floors' },
           { icon: Hotel, label: 'Chambres', path: '/rooms' },
           { icon: Gauge, label: 'Capteurs', path: '/sensors' },
           { icon: AlertCircle, label: 'Alertes', path: '/alerts' },
@@ -46,13 +48,10 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       case 'technician':
         return [
           { icon: LayoutDashboard, label: 'Tableau de bord', path: '/dashboard' },
+          { icon: Building2, label: 'Étages', path: '/floors' },
           { icon: Gauge, label: 'Capteurs', path: '/sensors' },
           { icon: AlertCircle, label: 'Alertes', path: '/alerts' },
           { icon: Wrench, label: 'Interventions', path: '/interventions' },
-        ];
-      case 'client':
-        return [
-          { icon: Hotel, label: 'Ma chambre', path: '/dashboard' },
         ];
       default:
         return [];

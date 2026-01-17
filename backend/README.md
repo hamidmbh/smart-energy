@@ -21,6 +21,36 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## Smart Energy API v1
+
+This backend now exposes a versioned REST API that matches the expectations of the Smart Energy Hotel Manager frontend.
+
+- **Base URL:** `http://localhost:8000/api/v1`
+- **Auth:** Laravel Sanctum personal access tokens (`Authorization: Bearer <token>`)
+- **Resources:** rooms, sensors, alerts, energy, interventions, users, reports
+- **Special actions:** `/rooms/{id}/mode`, `/rooms/{id}/equipment`, `/alerts/{id}/acknowledge|resolve`, `/interventions/{id}/complete`, `/energy/consumption`, `/energy/statistics`, `/reports/generate`
+
+### Getting started
+
+```bash
+cp .env.example .env
+php artisan key:generate
+php artisan migrate --seed
+php artisan serve
+```
+
+Then point the frontend to the API:
+
+```
+VITE_API_URL=http://localhost:8000/api/v1
+```
+
+Use the seeded demo accounts:
+
+- `admin@hotel.com` / `password`
+- `tech@hotel.com` / `password`
+- `client@hotel.com` / `password`
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.

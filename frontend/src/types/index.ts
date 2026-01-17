@@ -6,12 +6,28 @@ export interface User {
   name: string;
   role: UserRole;
   roomId?: string;
+  assignedRooms?: Room[];
+  assignedFloors?: number[];
+}
+
+export interface Floor {
+  id: string;
+  number: number;
+  name?: string;
+  description?: string;
+  rooms?: Room[];
+  roomsCount?: number;
 }
 
 export interface Room {
   id: string;
   number: string;
-  floor: number;
+  floorId?: string;
+  floor?: {
+    id: string;
+    number: number;
+    name?: string;
+  } | number;
   type: string;
   status: 'occupied' | 'vacant' | 'maintenance';
   currentTemperature?: number;
@@ -20,6 +36,7 @@ export interface Room {
   climatizationStatus?: boolean;
   mode?: RoomMode;
   clientId?: string;
+  technicians?: User[];
 }
 
 export type RoomMode = 'eco' | 'comfort' | 'night' | 'maintenance';

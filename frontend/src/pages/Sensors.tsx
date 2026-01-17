@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
-import { sensorsDB, roomsDB } from '@/services/database';
-import { sensorsAPI } from '@/services/api';
-import { Sensor } from '@/types';
+import { sensorsAPI, roomsAPI } from '@/services/api';
+import { Sensor, Room } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { 
   Gauge, 
   Thermometer, 
@@ -14,21 +18,88 @@ import {
   Zap,
   AlertCircle,
   CheckCircle,
-  XCircle
+  XCircle,
+  Plus
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Sensors = () => {
+  const { user } = useAuth();
   const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomsMap, setRoomsMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'error'>('all');
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    type: 'temperature' as Sensor['type'],
+    roomId: '',
+    value: '',
+    unit: '°C',
+    status: 'active' as Sensor['status'],
+  });
 
   useEffect(() => {
     loadSensors();
   }, []);
 
   const loadSensors = async () => {
-    const response = await sensorsAPI.getAll();
-    setSensors(response.data);
+    try {
+      const [sensorsResponse, roomsResponse] = await Promise.all([
+        sensorsAPI.getAll(),
+        roomsAPI.getAll(),
+      ]);
+      setSensors(sensorsResponse.data);
+      setRooms(roomsResponse.data);
+      const map = roomsResponse.data.reduce((acc, room) => {
+        acc[room.id] = room.number;
+        return acc;
+      }, {} as Record<string, string>);
+      setRoomsMap(map);
+    } catch (error) {
+      console.error('Error loading sensors:', error);
+      toast.error('Erreur lors du chargement des capteurs');
+    }
+  };
+
+  const handleAddSensor = async () => {
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast.error('Le nom du capteur est requis');
+      return;
+    }
+    if (!formData.roomId) {
+      toast.error('Veuillez sélectionner une chambre');
+      return;
+    }
+    
+    try {
+      await sensorsAPI.create({
+        name: formData.name,
+        type: formData.type,
+        roomId: formData.roomId,
+        value: 0,
+        unit: formData.unit,
+        status: formData.status,
+      });
+      await loadSensors();
+      setIsAddDialogOpen(false);
+      setFormData({
+        name: '',
+        type: 'temperature',
+        roomId: '',
+        value: '',
+        unit: '°C',
+        status: 'active',
+      });
+      toast.success('Capteur créé avec succès');
+    } catch (error: any) {
+      console.error('Error creating sensor:', error);
+      const errorMessage = error?.response?.data?.message || error?.response?.data?.errors?.room_id?.[0] || 'Erreur lors de la création';
+      toast.error(errorMessage);
+    }
   };
 
   const filteredSensors = sensors.filter(sensor =>
@@ -84,25 +155,28 @@ const Sensors = () => {
     }
   };
 
-  const getRoomNumber = (roomId: string) => {
-    const room = roomsDB.getById(roomId);
-    return room ? room.number : roomId;
-  };
+  const getRoomNumber = (roomId: string) => roomsMap[roomId] ?? roomId;
 
-  const getTimeSince = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return 'À l\'instant';
-    if (diffMins < 60) return `Il y a ${diffMins} min`;
-    
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `Il y a ${diffHours}h`;
-    
-    const diffDays = Math.floor(diffHours / 24);
-    return `Il y a ${diffDays}j`;
+  const getTimeSince = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Jamais';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Date invalide';
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return 'À l\'instant';
+      if (diffMins < 60) return `Il y a ${diffMins} min`;
+      
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `Il y a ${diffHours}h`;
+      
+      const diffDays = Math.floor(diffHours / 24);
+      return `Il y a ${diffDays}j`;
+    } catch (error) {
+      return 'Date invalide';
+    }
   };
 
   const stats = {
@@ -123,9 +197,108 @@ const Sensors = () => {
   return (
     <DashboardLayout>
       <div className="p-8 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Gestion des Capteurs</h1>
-          <p className="text-muted-foreground mt-1">Surveillance et contrôle de tous les capteurs</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Gestion des Capteurs</h1>
+            <p className="text-muted-foreground mt-1">Surveillance et contrôle de tous les capteurs</p>
+          </div>
+          {(user?.role === 'admin' || user?.role === 'technician') && (
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nouveau capteur
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Ajouter un capteur</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="sensor-name">Nom du capteur</Label>
+                    <Input
+                      id="sensor-name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="Capteur température salon"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sensor-type">Type</Label>
+                    <Select value={formData.type} onValueChange={(v: Sensor['type']) => {
+                      setFormData({ ...formData, type: v });
+                      // Set default unit based on type
+                      const unitMap: Record<Sensor['type'], string> = {
+                        temperature: '°C',
+                        humidity: '%',
+                        light: 'lux',
+                        motion: '',
+                        energy: 'kWh',
+                      };
+                      setFormData(prev => ({ ...prev, unit: unitMap[v] }));
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="temperature">Température</SelectItem>
+                        <SelectItem value="humidity">Humidité</SelectItem>
+                        <SelectItem value="light">Luminosité</SelectItem>
+                        <SelectItem value="motion">Mouvement</SelectItem>
+                        <SelectItem value="energy">Énergie</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sensor-room">Chambre</Label>
+                    <Select value={formData.roomId} onValueChange={(v) => setFormData({ ...formData, roomId: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner une chambre" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rooms.map((room) => (
+                          <SelectItem key={room.id} value={room.id}>
+                            Chambre {room.number} {room.floor && typeof room.floor === 'object' ? `- Étage ${room.floor.number}` : room.floorId ? `- Étage ${room.floorId}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sensor-unit">Unité</Label>
+                    <Input
+                      id="sensor-unit"
+                      value={formData.unit}
+                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                      placeholder="°C"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sensor-status">Statut</Label>
+                    <Select value={formData.status} onValueChange={(v: Sensor['status']) => setFormData({ ...formData, status: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Actif</SelectItem>
+                        <SelectItem value="inactive">Inactif</SelectItem>
+                        <SelectItem value="error">Erreur</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                    Annuler
+                  </Button>
+                  <Button onClick={handleAddSensor}>
+                    Créer
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
 
         {/* Statistics */}

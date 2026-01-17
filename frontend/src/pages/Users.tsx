@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { usersDB } from '@/services/database';
-import { usersAPI } from '@/services/api';
-import { User } from '@/types';
+import { usersAPI, roomsAPI, floorsAPI } from '@/services/api';
+import { User, Room, Floor } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,24 +18,31 @@ import {
   Shield,
   Mail
 } from 'lucide-react';
+import { Checkbox as CheckboxComponent } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
 const Users = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [filter, setFilter] = useState<'all' | 'admin' | 'technician' | 'client'>('all');
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [filter, setFilter] = useState<'all' | 'admin' | 'technician'>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    role: 'client' as User['role'],
+    password: '',
+    role: 'admin' as User['role'],
     roomId: '',
+    assignedFloorNumbers: [] as number[],
   });
 
   useEffect(() => {
     loadUsers();
+    loadRooms();
+    loadFloors();
   }, []);
 
   const loadUsers = async () => {
@@ -44,16 +50,38 @@ const Users = () => {
     setUsers(response.data);
   };
 
+  const loadRooms = async () => {
+    const response = await roomsAPI.getAll();
+    setRooms(response.data);
+  };
+
+  const loadFloors = async () => {
+    try {
+      const response = await floorsAPI.getAll();
+      setFloors(response.data);
+    } catch (error) {
+      console.error('Error loading floors:', error);
+    }
+  };
+
+  // Obtenir les numéros d'étages depuis l'API floors
+  const getAvailableFloors = (): number[] => {
+    return floors.map(floor => floor.number).sort((a, b) => a - b);
+  };
+
   const handleAddUser = async () => {
     try {
       await usersAPI.create({
-        ...formData,
-        id: `user-${Date.now()}`,
-        password: 'password123', // Default password
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        roomId: formData.roomId || undefined,
+        assignedFloorNumbers: formData.role === 'technician' ? formData.assignedFloorNumbers : undefined,
       });
       await loadUsers();
       setIsAddDialogOpen(false);
-      setFormData({ name: '', email: '', role: 'client', roomId: '' });
+      setFormData({ name: '', email: '', password: '', role: 'admin', roomId: '', assignedFloorNumbers: [] });
       toast.success('Utilisateur créé avec succès');
     } catch (error) {
       toast.error('Erreur lors de la création');
@@ -63,11 +91,21 @@ const Users = () => {
   const handleEditUser = async () => {
     if (!selectedUser) return;
     try {
-      await usersAPI.update(selectedUser.id, formData);
+      const updateData: any = {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        assignedFloorNumbers: formData.role === 'technician' ? formData.assignedFloorNumbers : undefined,
+      };
+      // Only include password if it's been changed
+      if (formData.password) {
+        updateData.password = formData.password;
+      }
+      await usersAPI.update(selectedUser.id, updateData);
       await loadUsers();
       setIsEditDialogOpen(false);
       setSelectedUser(null);
-      setFormData({ name: '', email: '', role: 'client', roomId: '' });
+      setFormData({ name: '', email: '', password: '', role: 'admin', roomId: '', assignedFloorNumbers: [] });
       toast.success('Utilisateur modifié avec succès');
     } catch (error) {
       toast.error('Erreur lors de la modification');
@@ -85,14 +123,21 @@ const Users = () => {
   };
 
   const openEditDialog = (user: User) => {
-    setSelectedUser(user);
-    setFormData({
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      roomId: user.roomId || '',
-    });
-    setIsEditDialogOpen(true);
+    try {
+      setSelectedUser(user);
+      setFormData({
+        name: user.name || '',
+        email: user.email || '',
+        password: '',
+        role: user.role || 'admin',
+        roomId: user.roomId || '',
+        assignedFloorNumbers: Array.isArray(user.assignedFloors) ? user.assignedFloors : [],
+      });
+      setIsEditDialogOpen(true);
+    } catch (error) {
+      console.error('Error opening edit dialog:', error);
+      toast.error('Erreur lors de l\'ouverture du formulaire d\'édition');
+    }
   };
 
   const filteredUsers = users.filter(user =>
@@ -103,7 +148,6 @@ const Users = () => {
     switch (role) {
       case 'admin': return Shield;
       case 'technician': return Wrench;
-      case 'client': return Hotel;
       default: return UsersIcon;
     }
   };
@@ -112,7 +156,6 @@ const Users = () => {
     switch (role) {
       case 'admin': return 'destructive';
       case 'technician': return 'default';
-      case 'client': return 'secondary';
       default: return 'outline';
     }
   };
@@ -121,7 +164,6 @@ const Users = () => {
     switch (role) {
       case 'admin': return 'Administrateur';
       case 'technician': return 'Technicien';
-      case 'client': return 'Client';
       default: return role;
     }
   };
@@ -130,7 +172,6 @@ const Users = () => {
     total: users.length,
     admin: users.filter(u => u.role === 'admin').length,
     technician: users.filter(u => u.role === 'technician').length,
-    client: users.filter(u => u.role === 'client').length,
   };
 
   return (
@@ -173,6 +214,16 @@ const Users = () => {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="password">Mot de passe</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Minimum 8 caractères"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="role">Rôle</Label>
                   <Select value={formData.role} onValueChange={(v: User['role']) => setFormData({ ...formData, role: v })}>
                     <SelectTrigger>
@@ -181,19 +232,47 @@ const Users = () => {
                     <SelectContent>
                       <SelectItem value="admin">Administrateur</SelectItem>
                       <SelectItem value="technician">Technicien</SelectItem>
-                      <SelectItem value="client">Client</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="roomId">Chambre (optionnel)</Label>
-                  <Input
-                    id="roomId"
-                    value={formData.roomId}
-                    onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
-                    placeholder="101"
-                  />
-                </div>
+                {formData.role === 'technician' && (
+                  <div className="space-y-2">
+                    <Label>Étages assignés</Label>
+                    <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                      {getAvailableFloors().length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Aucun étage disponible</p>
+                      ) : (
+                        getAvailableFloors().map((floor) => (
+                          <div key={floor} className="flex items-center space-x-2">
+                            <CheckboxComponent
+                              id={`floor-${floor}`}
+                              checked={formData.assignedFloorNumbers.includes(floor)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setFormData({
+                                    ...formData,
+                                    assignedFloorNumbers: [...formData.assignedFloorNumbers, floor],
+                                  });
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    assignedFloorNumbers: formData.assignedFloorNumbers.filter(f => f !== floor),
+                                  });
+                                }
+                              }}
+                            />
+                            <Label
+                              htmlFor={`floor-${floor}`}
+                              className="text-sm font-normal cursor-pointer"
+                            >
+                              Étage {floor}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -242,17 +321,6 @@ const Users = () => {
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Clients</p>
-                  <p className="text-2xl font-bold">{stats.client}</p>
-                </div>
-                <Hotel className="h-8 w-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Filters */}
@@ -261,7 +329,6 @@ const Users = () => {
             <TabsTrigger value="all">Tous</TabsTrigger>
             <TabsTrigger value="admin">Administrateurs</TabsTrigger>
             <TabsTrigger value="technician">Techniciens</TabsTrigger>
-            <TabsTrigger value="client">Clients</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -300,10 +367,10 @@ const Users = () => {
                       <Mail className="h-4 w-4" />
                       <span>{user.email}</span>
                     </div>
-                    {user.roomId && (
+                    {user.role === 'technician' && Array.isArray(user.assignedFloors) && user.assignedFloors.length > 0 && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Hotel className="h-4 w-4" />
-                        <span>Chambre {user.roomId}</span>
+                        <span>{user.assignedFloors.length} étage(s) assigné(s): {user.assignedFloors.join(', ')}</span>
                       </div>
                     )}
                   </div>
@@ -380,6 +447,16 @@ const Users = () => {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="edit-password">Mot de passe (laisser vide pour ne pas modifier)</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Minimum 8 caractères"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-role">Rôle</Label>
               <Select value={formData.role} onValueChange={(v: User['role']) => setFormData({ ...formData, role: v })}>
                 <SelectTrigger>
@@ -392,14 +469,44 @@ const Users = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-roomId">Chambre (optionnel)</Label>
-              <Input
-                id="edit-roomId"
-                value={formData.roomId}
-                onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
-              />
-            </div>
+            {formData.role === 'technician' && (
+              <div className="space-y-2">
+                <Label>Étages assignés</Label>
+                <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                  {getAvailableFloors().length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucun étage disponible</p>
+                  ) : (
+                    getAvailableFloors().map((floor) => (
+                      <div key={floor} className="flex items-center space-x-2">
+                        <CheckboxComponent
+                          id={`edit-floor-${floor}`}
+                          checked={formData.assignedFloorNumbers.includes(floor)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setFormData({
+                                ...formData,
+                                assignedFloorNumbers: [...formData.assignedFloorNumbers, floor],
+                              });
+                            } else {
+                              setFormData({
+                                ...formData,
+                                assignedFloorNumbers: formData.assignedFloorNumbers.filter(f => f !== floor),
+                              });
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`edit-floor-${floor}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          Étage {floor}
+                        </Label>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { alertsDB, roomsDB, sensorsDB } from '@/services/database';
-import { alertsAPI } from '@/services/api';
+import { alertsAPI, roomsAPI, sensorsAPI } from '@/services/api';
 import { Alert } from '@/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +19,8 @@ import { toast } from 'sonner';
 
 const Alerts = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [roomsMap, setRoomsMap] = useState<Record<string, string>>({});
+  const [sensorsMap, setSensorsMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'all' | 'pending' | 'acknowledged' | 'resolved'>('all');
 
   useEffect(() => {
@@ -27,8 +28,25 @@ const Alerts = () => {
   }, []);
 
   const loadAlerts = async () => {
-    const response = await alertsAPI.getAll();
-    setAlerts(response.data);
+    const [alertsResponse, roomsResponse, sensorsResponse] = await Promise.all([
+      alertsAPI.getAll(),
+      roomsAPI.getAll(),
+      sensorsAPI.getAll(),
+    ]);
+
+    setAlerts(alertsResponse.data);
+    setRoomsMap(
+      roomsResponse.data.reduce((acc, room) => {
+        acc[room.id] = room.number;
+        return acc;
+      }, {} as Record<string, string>)
+    );
+    setSensorsMap(
+      sensorsResponse.data.reduce((acc, sensor) => {
+        acc[sensor.id] = sensor.name;
+        return acc;
+      }, {} as Record<string, string>)
+    );
   };
 
   const filteredAlerts = alerts.filter(alert =>
@@ -86,14 +104,12 @@ const Alerts = () => {
 
   const getRoomNumber = (roomId?: string) => {
     if (!roomId) return 'N/A';
-    const room = roomsDB.getById(roomId);
-    return room ? room.number : roomId;
+    return roomsMap[roomId] ?? roomId;
   };
 
   const getSensorName = (sensorId?: string) => {
     if (!sensorId) return null;
-    const sensor = sensorsDB.getById(sensorId);
-    return sensor ? sensor.name : sensorId;
+    return sensorsMap[sensorId] ?? sensorId;
   };
 
   const getTimeSince = (dateString: string) => {

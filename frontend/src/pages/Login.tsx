@@ -23,8 +23,10 @@ const Login = () => {
       await login(email, password);
       toast.success('Connexion réussie');
       navigate('/dashboard');
-    } catch (error) {
-      toast.error('Identifiants invalides');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      const message = error?.response?.data?.message || error?.message || 'Identifiants invalides';
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -77,26 +79,6 @@ const Login = () => {
               )}
             </Button>
           </form>
-          
-          <div className="mt-6 pt-6 border-t">
-            <p className="text-sm text-muted-foreground text-center mb-3">
-              Comptes de démonstration :
-            </p>
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <div className="flex justify-between">
-                <span className="font-medium">Admin:</span>
-                <span>admin@hotel.com</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Technicien:</span>
-                <span>tech@hotel.com</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Client:</span>
-                <span>client@hotel.com</span>
-              </div>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

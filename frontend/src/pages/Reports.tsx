@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { energyDB, roomsDB, alertsDB, interventionsDB } from '@/services/database';
-import { energyAPI } from '@/services/api';
+import { energyAPI, roomsAPI, alertsAPI, interventionsAPI, reportsAPI } from '@/services/api';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,9 +15,15 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
+import { Alert, EnergyConsumption, Intervention, Room } from '@/types';
 
 const Reports = () => {
-  const [energyData, setEnergyData] = useState<any[]>([]);
+  const [energyChartData, setEnergyChartData] = useState<any[]>([]);
+  const [energySamples, setEnergySamples] = useState<EnergyConsumption[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [interventions, setInterventions] = useState<Intervention[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'7d' | '30d' | '90d'>('30d');
 
   useEffect(() => {
@@ -26,51 +31,74 @@ const Reports = () => {
   }, [selectedPeriod]);
 
   const loadReportData = async () => {
+    setIsLoading(true);
     const days = selectedPeriod === '7d' ? 7 : selectedPeriod === '30d' ? 30 : 90;
-    const energy = energyDB.getAll()
-      .filter(e => {
-        const date = new Date(e.date);
-        const daysAgo = new Date();
-        daysAgo.setDate(daysAgo.getDate() - days);
-        return date >= daysAgo;
-      })
-      .sort((a, b) => a.date.localeCompare(b.date));
+    const since = new Date();
+    since.setDate(since.getDate() - days);
 
-    // Group by date
-    const groupedData = energy.reduce((acc, item) => {
-      const existing = acc.find(d => d.date === item.date);
-      if (existing) {
-        existing.consumption += item.consumption;
-        existing.cost += item.cost;
-      } else {
-        acc.push({
-          date: item.date,
-          consumption: item.consumption,
-          cost: item.cost,
-        });
-      }
-      return acc;
-    }, [] as any[]);
+    try {
+      const [energyResponse, roomsResponse, alertsResponse, interventionsResponse] = await Promise.all([
+        energyAPI.getConsumption('daily'),
+        roomsAPI.getAll(),
+        alertsAPI.getAll(),
+        interventionsAPI.getAll(),
+      ]);
 
-    setEnergyData(groupedData);
+      const filteredEnergy = energyResponse.data
+        .filter((entry) => {
+          const entryDate = new Date(entry.date);
+          return entryDate >= since;
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      const groupedData = filteredEnergy.reduce((acc, item) => {
+        const existing = acc.find((d) => d.date === item.date);
+        if (existing) {
+          existing.consumption += item.consumption;
+          existing.cost += item.cost;
+        } else {
+          acc.push({
+            date: item.date,
+            consumption: item.consumption,
+            cost: item.cost,
+          });
+        }
+
+        return acc;
+      }, [] as any[]);
+
+      setEnergyChartData(groupedData);
+      setEnergySamples(filteredEnergy);
+      setRooms(roomsResponse.data);
+      setAlerts(alertsResponse.data);
+      setInterventions(interventionsResponse.data);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erreur lors du chargement des rapports');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Calculate statistics
-  const totalConsumption = energyData.reduce((sum, d) => sum + d.consumption, 0);
-  const totalCost = energyData.reduce((sum, d) => sum + d.cost, 0);
-  const avgConsumption = totalConsumption / (energyData.length || 1);
-  const avgCost = totalCost / (energyData.length || 1);
+  const totalConsumption = energyChartData.reduce((sum, d) => sum + d.consumption, 0);
+  const totalCost = energyChartData.reduce((sum, d) => sum + d.cost, 0);
+  const avgConsumption = totalConsumption / (energyChartData.length || 1);
+  const avgCost = totalCost / (energyChartData.length || 1);
 
   // Consumption by room
-  const rooms = roomsDB.getAll();
-  const roomConsumption = rooms.map(room => {
-    const roomEnergy = energyDB.query(e => e.roomId === room.id);
-    const consumption = roomEnergy.reduce((sum, e) => sum + e.consumption, 0);
-    return {
-      name: `Ch.${room.number}`,
-      value: consumption,
-    };
-  }).sort((a, b) => b.value - a.value).slice(0, 8);
+  const roomConsumption = rooms
+    .map(room => {
+      const consumption = energySamples
+        .filter(e => e.roomId === room.id)
+        .reduce((sum, e) => sum + e.consumption, 0);
+      return {
+        name: `Ch.${room.number}`,
+        value: consumption,
+      };
+    })
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
 
   // Status distribution
   const roomsByStatus = [
@@ -80,7 +108,6 @@ const Reports = () => {
   ];
 
   // Alerts statistics
-  const alerts = alertsDB.getAll();
   const alertStats = {
     total: alerts.length,
     resolved: alerts.filter(a => a.status === 'resolved').length,
@@ -88,64 +115,35 @@ const Reports = () => {
   };
 
   // Interventions statistics
-  const interventions = interventionsDB.getAll();
   const interventionStats = {
     total: interventions.length,
     completed: interventions.filter(i => i.status === 'completed').length,
     inProgress: interventions.filter(i => i.status === 'in_progress').length,
   };
 
-  const handleExportPDF = () => {
-    // Generate a simple text-based report
-    const reportContent = `
-RAPPORT ÉNERGÉTIQUE SMART ENERGY HOTEL
-========================================
-
-Période: ${selectedPeriod === '7d' ? '7 jours' : selectedPeriod === '30d' ? '30 jours' : '90 jours'}
-Date de génération: ${new Date().toLocaleDateString('fr-FR')}
-
-STATISTIQUES GLOBALES
----------------------
-Consommation totale: ${totalConsumption.toFixed(2)} kWh
-Coût total: ${totalCost.toFixed(2)} €
-Consommation moyenne: ${avgConsumption.toFixed(2)} kWh/jour
-Coût moyen: ${avgCost.toFixed(2)} €/jour
-
-ALERTES
--------
-Total: ${alertStats.total}
-Résolues: ${alertStats.resolved}
-En attente: ${alertStats.pending}
-Taux de résolution: ${((alertStats.resolved / (alertStats.total || 1)) * 100).toFixed(0)}%
-
-INTERVENTIONS
--------------
-Total: ${interventionStats.total}
-Terminées: ${interventionStats.completed}
-En cours: ${interventionStats.inProgress}
-Performance: ${((interventionStats.completed / (interventionStats.total || 1)) * 100).toFixed(0)}%
-
-ÉCONOMIES POTENTIELLES
-----------------------
-${(totalCost * 0.15).toFixed(2)} € (estimation basée sur l'optimisation)
-    `;
-
-    const blob = new Blob([reportContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `rapport-energie-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success('Rapport exporté avec succès');
+  const handleExportPDF = async () => {
+    try {
+      const response = await reportsAPI.generate('energy', { period: selectedPeriod });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rapport-energie-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Rapport PDF généré');
+    } catch (error) {
+      console.error(error);
+      toast.error('Impossible de générer le PDF');
+    }
   };
 
   const handleExportExcel = () => {
     // Generate CSV format
     let csvContent = 'Date,Consommation (kWh),Coût (€)\n';
-    energyData.forEach(row => {
+    energyChartData.forEach(row => {
       csvContent += `${row.date},${row.consumption.toFixed(2)},${row.cost.toFixed(2)}\n`;
     });
     
@@ -166,6 +164,14 @@ ${(totalCost * 0.15).toFixed(2)} € (estimation basée sur l'optimisation)
     URL.revokeObjectURL(url);
     toast.success('Données exportées avec succès');
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-8">Chargement des données...</div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -278,7 +284,7 @@ ${(totalCost * 0.15).toFixed(2)} € (estimation basée sur l'optimisation)
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={energyData}>
+                <LineChart data={energyChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="date" 
@@ -303,7 +309,7 @@ ${(totalCost * 0.15).toFixed(2)} € (estimation basée sur l'optimisation)
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={energyData}>
+                <LineChart data={energyChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="date" 
