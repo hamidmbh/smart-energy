@@ -46,26 +46,41 @@ const Sensors = () => {
   }, []);
 
   const loadSensors = async () => {
-    const [sensorsResponse, roomsResponse] = await Promise.all([
-      sensorsAPI.getAll(),
-      roomsAPI.getAll(),
-    ]);
-    setSensors(sensorsResponse.data);
-    setRooms(roomsResponse.data);
-    const map = roomsResponse.data.reduce((acc, room) => {
-      acc[room.id] = room.number;
-      return acc;
-    }, {} as Record<string, string>);
-    setRoomsMap(map);
+    try {
+      const [sensorsResponse, roomsResponse] = await Promise.all([
+        sensorsAPI.getAll(),
+        roomsAPI.getAll(),
+      ]);
+      setSensors(sensorsResponse.data);
+      setRooms(roomsResponse.data);
+      const map = roomsResponse.data.reduce((acc, room) => {
+        acc[room.id] = room.number;
+        return acc;
+      }, {} as Record<string, string>);
+      setRoomsMap(map);
+    } catch (error) {
+      console.error('Error loading sensors:', error);
+      toast.error('Erreur lors du chargement des capteurs');
+    }
   };
 
   const handleAddSensor = async () => {
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast.error('Le nom du capteur est requis');
+      return;
+    }
+    if (!formData.roomId) {
+      toast.error('Veuillez sélectionner une chambre');
+      return;
+    }
+    
     try {
       await sensorsAPI.create({
         name: formData.name,
         type: formData.type,
         roomId: formData.roomId,
-        value: formData.value ? parseFloat(formData.value) : 0,
+        value: 0,
         unit: formData.unit,
         status: formData.status,
       });
@@ -80,8 +95,10 @@ const Sensors = () => {
         status: 'active',
       });
       toast.success('Capteur créé avec succès');
-    } catch (error) {
-      toast.error('Erreur lors de la création');
+    } catch (error: any) {
+      console.error('Error creating sensor:', error);
+      const errorMessage = error?.response?.data?.message || error?.response?.data?.errors?.room_id?.[0] || 'Erreur lors de la création';
+      toast.error(errorMessage);
     }
   };
 
@@ -140,20 +157,26 @@ const Sensors = () => {
 
   const getRoomNumber = (roomId: string) => roomsMap[roomId] ?? roomId;
 
-  const getTimeSince = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return 'À l\'instant';
-    if (diffMins < 60) return `Il y a ${diffMins} min`;
-    
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `Il y a ${diffHours}h`;
-    
-    const diffDays = Math.floor(diffHours / 24);
-    return `Il y a ${diffDays}j`;
+  const getTimeSince = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Jamais';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Date invalide';
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return 'À l\'instant';
+      if (diffMins < 60) return `Il y a ${diffMins} min`;
+      
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `Il y a ${diffHours}h`;
+      
+      const diffDays = Math.floor(diffHours / 24);
+      return `Il y a ${diffDays}j`;
+    } catch (error) {
+      return 'Date invalide';
+    }
   };
 
   const stats = {
@@ -236,33 +259,20 @@ const Sensors = () => {
                       <SelectContent>
                         {rooms.map((room) => (
                           <SelectItem key={room.id} value={room.id}>
-                            Chambre {room.number} - Étage {room.floor}
+                            Chambre {room.number} {room.floor && typeof room.floor === 'object' ? `- Étage ${room.floor.number}` : room.floorId ? `- Étage ${room.floorId}` : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="sensor-value">Valeur initiale</Label>
-                      <Input
-                        id="sensor-value"
-                        type="number"
-                        step="0.01"
-                        value={formData.value}
-                        onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                        placeholder="0"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="sensor-unit">Unité</Label>
-                      <Input
-                        id="sensor-unit"
-                        value={formData.unit}
-                        onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                        placeholder="°C"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sensor-unit">Unité</Label>
+                    <Input
+                      id="sensor-unit"
+                      value={formData.unit}
+                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                      placeholder="°C"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="sensor-status">Statut</Label>

@@ -83,14 +83,16 @@ class SensorController extends Controller
 
     private function validateSensor(Request $request, bool $isUpdate = false): array
     {
-        return $request->validate([
+        $rules = [
             'name' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:100'],
             'type' => [$isUpdate ? 'sometimes' : 'required', 'in:temperature,humidity,light,motion,energy'],
-            'room_id' => ['nullable', 'exists:rooms,id'],
+            'room_id' => ['required', 'exists:rooms,id'],
             'value' => ['nullable', 'numeric'],
             'unit' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:10'],
             'status' => [$isUpdate ? 'sometimes' : 'required', 'in:active,inactive,error'],
-        ]);
+        ];
+        
+        return $request->validate($rules);
     }
 
     private function storeReading(Sensor $sensor, float $value): void
@@ -106,7 +108,9 @@ class SensorController extends Controller
     private function mergeCamelCaseFields(Request $request): void
     {
         if ($request->has('roomId') && ! $request->has('room_id')) {
-            $request->merge(['room_id' => $request->input('roomId')]);
+            $roomId = $request->input('roomId');
+            // Convert empty string to null
+            $request->merge(['room_id' => $roomId === '' ? null : $roomId]);
         }
     }
 }
