@@ -19,7 +19,8 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Plus
+  Plus,
+  Edit
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
@@ -32,6 +33,8 @@ const Sensors = () => {
   const [roomsMap, setRoomsMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'error'>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     type: 'temperature' as Sensor['type'],
@@ -98,6 +101,59 @@ const Sensors = () => {
     } catch (error: any) {
       console.error('Error creating sensor:', error);
       const errorMessage = error?.response?.data?.message || error?.response?.data?.errors?.room_id?.[0] || 'Erreur lors de la création';
+      toast.error(errorMessage);
+    }
+  };
+
+  const openEditDialog = (sensor: Sensor) => {
+    setSelectedSensor(sensor);
+    setFormData({
+      name: sensor.name,
+      type: sensor.type,
+      roomId: sensor.roomId || '',
+      value: sensor.value?.toString() || '',
+      unit: sensor.unit || '°C',
+      status: sensor.status,
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditSensor = async () => {
+    if (!selectedSensor) return;
+    
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast.error('Le nom du capteur est requis');
+      return;
+    }
+    if (!formData.roomId) {
+      toast.error('Veuillez sélectionner une chambre');
+      return;
+    }
+    
+    try {
+      await sensorsAPI.update(selectedSensor.id, {
+        name: formData.name,
+        type: formData.type,
+        roomId: formData.roomId,
+        unit: formData.unit,
+        status: formData.status,
+      });
+      await loadSensors();
+      setIsEditDialogOpen(false);
+      setSelectedSensor(null);
+      setFormData({
+        name: '',
+        type: 'temperature',
+        roomId: '',
+        value: '',
+        unit: '°C',
+        status: 'active',
+      });
+      toast.success('Capteur modifié avec succès');
+    } catch (error: any) {
+      console.error('Error updating sensor:', error);
+      const errorMessage = error?.response?.data?.message || error?.response?.data?.errors?.room_id?.[0] || 'Erreur lors de la modification';
       toast.error(errorMessage);
     }
   };
@@ -301,6 +357,97 @@ const Sensors = () => {
           )}
         </div>
 
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Modifier le capteur</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-sensor-name">Nom du capteur</Label>
+                <Input
+                  id="edit-sensor-name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Capteur température salon"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-sensor-type">Type</Label>
+                <Select value={formData.type} onValueChange={(v: Sensor['type']) => {
+                  setFormData({ ...formData, type: v });
+                  // Set default unit based on type
+                  const unitMap: Record<Sensor['type'], string> = {
+                    temperature: '°C',
+                    humidity: '%',
+                    light: 'lux',
+                    motion: '',
+                    energy: 'kWh',
+                  };
+                  setFormData(prev => ({ ...prev, unit: unitMap[v] }));
+                }}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="temperature">Température</SelectItem>
+                    <SelectItem value="humidity">Humidité</SelectItem>
+                    <SelectItem value="light">Luminosité</SelectItem>
+                    <SelectItem value="motion">Mouvement</SelectItem>
+                    <SelectItem value="energy">Énergie</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-sensor-room">Chambre</Label>
+                <Select value={formData.roomId} onValueChange={(v) => setFormData({ ...formData, roomId: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner une chambre" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rooms.map((room) => (
+                      <SelectItem key={room.id} value={room.id}>
+                        Chambre {room.number} {room.floor && typeof room.floor === 'object' ? `- Étage ${room.floor.number}` : room.floorId ? `- Étage ${room.floorId}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-sensor-unit">Unité</Label>
+                <Input
+                  id="edit-sensor-unit"
+                  value={formData.unit}
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  placeholder="°C"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-sensor-status">Statut</Label>
+                <Select value={formData.status} onValueChange={(v: Sensor['status']) => setFormData({ ...formData, status: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Actif</SelectItem>
+                    <SelectItem value="inactive">Inactif</SelectItem>
+                    <SelectItem value="error">Erreur</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Annuler
+              </Button>
+              <Button onClick={handleEditSensor}>
+                Enregistrer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
@@ -406,6 +553,19 @@ const Sensors = () => {
                             </p>
                           </div>
                         </div>
+                        {(user?.role === 'admin' || user?.role === 'technician') && (
+                          <div className="pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={() => openEditDialog(sensor)}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Modifier
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

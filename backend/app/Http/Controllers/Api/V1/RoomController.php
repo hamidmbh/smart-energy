@@ -41,9 +41,16 @@ class RoomController extends Controller
 
     public function destroy(Room $room): JsonResponse
     {
-        $room->delete();
+        try {
+            $room->delete();
 
-        return response()->json(['success' => true]);
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la suppression: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function updateMode(Request $request, Room $room): RoomResource

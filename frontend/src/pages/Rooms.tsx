@@ -16,7 +16,8 @@ import {
   Settings,
   Filter,
   Plus,
-  Edit
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
@@ -244,6 +245,21 @@ const Rooms = () => {
       toast.success('Chambre modifiée avec succès');
     } catch (error) {
       toast.error('Erreur lors de la modification');
+    }
+  };
+
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette chambre ? Cette action est irréversible.')) {
+      return;
+    }
+    try {
+      await roomsAPI.delete(roomId);
+      await loadRooms();
+      await loadSensors();
+      toast.success('Chambre supprimée avec succès');
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Erreur lors de la suppression';
+      toast.error(message);
     }
   };
 
@@ -570,15 +586,24 @@ const Rooms = () => {
                     </Button>
                   </div>
                 </div>
-                <div className="pt-2">
+                <div className="pt-2 flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full"
+                    className="flex-1"
                     onClick={() => openEditDialog(room)}
                   >
                     <Edit className="h-4 w-4 mr-2" />
                     Modifier
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => handleDeleteRoom(room.id)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Supprimer
                   </Button>
                 </div>
               </CardContent>
