@@ -117,8 +117,9 @@ const Users = () => {
       await usersAPI.delete(userId);
       await loadUsers();
       toast.success('Utilisateur supprimé avec succès');
-    } catch (error) {
-      toast.error('Erreur lors de la suppression');
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Erreur lors de la suppression';
+      toast.error(message);
     }
   };
 

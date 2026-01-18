@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Models\Room;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -62,9 +63,23 @@ class UserController extends Controller
 
     public function destroy(User $user): JsonResponse
     {
-        $user->delete();
+        try {
+            // Delete related interventions first (they don't have cascade delete)
+            $user->technicianInterventions()->delete();
+            
+            // Remove user as client from rooms (rooms.client_id doesn't have cascade delete)
+            Room::where('client_id', $user->id)->update(['client_id' => null]);
+            
+            // Delete the user (technicianFloors and assignedRooms will cascade automatically)
+            $user->delete();
 
-        return response()->json(['success' => true]);
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la suppression: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     private function validateUser(Request $request, ?int $userId = null, bool $isUpdate = false): array
