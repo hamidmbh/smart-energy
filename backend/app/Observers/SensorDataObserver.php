@@ -14,11 +14,20 @@ class SensorDataObserver
     {
         // Mettre à jour tous les capteurs de type "temperature" avec temp_aht
         if ($sensorData->temp_aht !== null) {
-            Sensor::where('type', 'temperature')
-                ->update([
-                    'value' => $sensorData->temp_aht,
-                    'last_reading_at' => $sensorData->received_at ?? now(),
-                ]);
+            $temperatureSensors = Sensor::where('type', 'temperature')->with('room')->get();
+            
+            foreach ($temperatureSensors as $sensor) {
+                // Mettre à jour le capteur
+                $sensor->value = $sensorData->temp_aht;
+                $sensor->last_reading_at = $sensorData->received_at ?? now();
+                $sensor->save();
+                
+                // Mettre à jour directement la chambre associée (sans passer par l'Observer)
+                if ($sensor->room_id && $sensor->room) {
+                    $sensor->room->current_temperature = $sensorData->temp_aht;
+                    $sensor->room->save();
+                }
+            }
         }
 
         // Mettre à jour tous les capteurs de type "humidity" avec hum_aht

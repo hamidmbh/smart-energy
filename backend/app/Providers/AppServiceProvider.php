@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use App\Models\SensorData;
+use App\Models\Sensor;
 use App\Observers\SensorDataObserver;
+use App\Observers\SensorObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,5 +24,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         SensorData::observe(SensorDataObserver::class);
+        Sensor::observe(SensorObserver::class);
     }
 }
